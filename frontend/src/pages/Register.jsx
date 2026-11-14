@@ -1,53 +1,46 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import axiosInstance from '../axiosConfig';
+import FormField from '../components/FormField';
+import PrimaryButton from '../components/PrimaryButton';
+import AlertMessage from '../components/AlertMessage';
 
-const Register = () => {
+export default function Register() {
   const [formData, setFormData] = useState({ name: '', email: '', password: '' });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+  const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
+    setLoading(true);
     try {
-      await axiosInstance.post('/api/auth/register', formData);
-      alert('Registration successful. Please log in.');
-      navigate('/login');
-    } catch (error) {
-      alert('Registration failed. Please try again.');
+      const response = await axiosInstance.post('/api/auth/register', formData);
+      login(response.data);
+      navigate('/festivals');
+    } catch (failure) {
+      setError(failure.response?.data?.message || 'Unable to register. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-md mx-auto mt-20">
-      <form onSubmit={handleSubmit} className="bg-white p-6 shadow-md rounded">
-        <h1 className="text-2xl font-bold mb-4 text-center">Register</h1>
-        <input
-          type="text"
-          placeholder="Name"
-          value={formData.name}
-          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-          className="w-full mb-4 p-2 border rounded"
-        />
-        <input
-          type="email"
-          placeholder="Email"
-          value={formData.email}
-          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-          className="w-full mb-4 p-2 border rounded"
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          value={formData.password}
-          onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-          className="w-full mb-4 p-2 border rounded"
-        />
-        <button type="submit" className="w-full bg-green-600 text-white p-2 rounded">
-          Register
-        </button>
+    <section className="auth-panel">
+      <p className="eyebrow">Join the crowd</p>
+      <h1>Create your account</h1>
+      <p>Discover music festivals with PulseFest.</p>
+      <form onSubmit={handleSubmit}>
+        <AlertMessage>{error}</AlertMessage>
+        <FormField id="name" label="Name" autoComplete="name" required maxLength={120} value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
+        <FormField id="email" label="Email" type="email" autoComplete="email" required value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
+        <FormField id="password" label="Password" type="password" autoComplete="new-password" required value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} />
+        <PrimaryButton type="submit" disabled={loading}>{loading ? 'Creating account…' : 'Create account'}</PrimaryButton>
       </form>
-    </div>
+      <p>Already registered? <Link to="/login">Log in</Link></p>
+    </section>
   );
-};
-
-export default Register;
+}

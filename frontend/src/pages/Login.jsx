@@ -1,48 +1,45 @@
 import { useState } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { useNavigate } from 'react-router-dom';
 import axiosInstance from '../axiosConfig';
+import FormField from '../components/FormField';
+import PrimaryButton from '../components/PrimaryButton';
+import AlertMessage from '../components/AlertMessage';
 
-const Login = () => {
+export default function Login() {
   const [formData, setFormData] = useState({ email: '', password: '' });
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
   const { login } = useAuth();
   const navigate = useNavigate();
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    setError('');
+    setLoading(true);
     try {
       const response = await axiosInstance.post('/api/auth/login', formData);
       login(response.data);
-      navigate('/tasks');
-    } catch (error) {
-      alert('Login failed. Please try again.');
+      navigate('/festivals');
+    } catch (failure) {
+      setError(failure.response?.data?.message || 'Unable to log in. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
-    <div className="max-w-md mx-auto mt-20">
-      <form onSubmit={handleSubmit} className="bg-white p-6 shadow-md rounded">
-        <h1 className="text-2xl font-bold mb-4 text-center">Login</h1>
-        <input
-          type="email"
-          placeholder="Email"
-          value={formData.email}
-          onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-          className="w-full mb-4 p-2 border rounded"
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          value={formData.password}
-          onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-          className="w-full mb-4 p-2 border rounded"
-        />
-        <button type="submit" className="w-full bg-blue-600 text-white p-2 rounded">
-          Login
-        </button>
+    <section className="auth-panel">
+      <p className="eyebrow">Your next live moment starts here</p>
+      <h1>Welcome to PulseFest</h1>
+      <p>Log in to discover upcoming music festivals.</p>
+      <form onSubmit={handleSubmit}>
+        <AlertMessage>{error}</AlertMessage>
+        <FormField id="email" label="Email" type="email" autoComplete="email" required value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
+        <FormField id="password" label="Password" type="password" autoComplete="current-password" required value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} />
+        <PrimaryButton type="submit" disabled={loading}>{loading ? 'Logging in…' : 'Log in'}</PrimaryButton>
       </form>
-    </div>
+      <p>New here? <Link to="/register">Create an account</Link></p>
+    </section>
   );
-};
-
-export default Login;
+}
