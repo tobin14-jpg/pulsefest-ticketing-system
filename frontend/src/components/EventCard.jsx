@@ -1,4 +1,4 @@
-export default function EventCard({ event }) {
+export default function EventCard({ event, children }) {
   const date = new Date(event.date);
   return (
     <article className="event-card">
@@ -15,6 +15,7 @@ export default function EventCard({ event }) {
         <div><dt>Where</dt><dd>{event.location}</dd></div>
       </dl>
       <div className="event-price">{new Intl.NumberFormat('en-AU', { style: 'currency', currency: 'AUD' }).format(event.price)} <span>per ticket</span></div>
+      {children && <div className="event-actions">{children}</div>}
     </article>
   );
 }
