@@ -6,6 +6,7 @@
   "scripts": {
     "test": "mocha",
     "seed:festival": "node scripts/seedFestival.js --confirm-demo-data",
+    "organiser:promote": "node scripts/promoteOrganiser.js",
     "start": "node server.js",
     "dev": "nodemon server.js",
     "prod": "node server.js"

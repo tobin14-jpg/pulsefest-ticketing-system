@@ -60,6 +60,12 @@ p { color: #bcb6c9; line-height: 1.7; }
 .confirmation { max-width: 700px; margin: 24px auto; }
 .confirmation h1 { font-size: 2.5rem; }
 .booking-reference { display: block; overflow-wrap: anywhere; color: #c9f66f; margin-bottom: 24px; }
+.event-form-panel { max-width: 680px; margin: 0 auto; padding: 28px; background: #1c1725; border: 1px solid #3b314b; border-radius: 12px; }
+.event-form-panel h1 { font-size: 2.4rem; margin-top: 24px; }
+.event-form-panel .eyebrow { margin-top: 24px; }
+.event-form-panel button { margin: 8px 12px 12px 0; }
+.event-form-panel fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+.form-field textarea { width: 100%; padding: 12px; border: 1px solid #776987; border-radius: 6px; background: #110e18; color: white; font: inherit; resize: vertical; }
 @media (max-width: 700px) { .booking-layout { grid-template-columns: 1fr; } }
 /* Keep the retained starter profile form readable until its styling increment. */
 .page-container .bg-white { color-scheme: light; color: #17141d; }

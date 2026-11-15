@@ -11,6 +11,11 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
+app.use((error, req, res, next) => {
+    if (error.type === 'entity.parse.failed') return res.status(400).json({ message: 'Send a valid JSON request body.' });
+    if (error.type === 'entity.too.large') return res.status(413).json({ message: 'Request body is too large.' });
+    return next(error);
+});
 app.use('/api/auth', require('./routes/authRoutes'));
 app.use('/api/events', require('./routes/eventRoutes'));
 app.use('/api/reservations', require('./routes/reservationRoutes'));

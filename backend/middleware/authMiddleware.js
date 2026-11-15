@@ -19,4 +19,12 @@ const protect = async (req, res, next) => {
     return next();
 };
 
-module.exports = { protect };
+const organiserOnly = (req, res, next) => {
+    // Always use the current database user loaded by protect, never a JWT/body role.
+    if (req.user?.role !== 'organiser') {
+        return res.status(403).json({ message: 'Organiser access is required.' });
+    }
+    return next();
+};
+
+module.exports = { protect, organiserOnly };

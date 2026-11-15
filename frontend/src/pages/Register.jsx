@@ -37,7 +37,7 @@ export default function Register() {
         <AlertMessage>{error}</AlertMessage>
         <FormField id="name" label="Name" autoComplete="name" required maxLength={120} value={formData.name} onChange={(e) => setFormData({ ...formData, name: e.target.value })} />
         <FormField id="email" label="Email" type="email" autoComplete="email" required value={formData.email} onChange={(e) => setFormData({ ...formData, email: e.target.value })} />
-        <FormField id="password" label="Password" type="password" autoComplete="new-password" required value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} />
+        <FormField id="password" label="Password (at least 8 characters)" type="password" autoComplete="new-password" minLength={8} required value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} />
         <PrimaryButton type="submit" disabled={loading}>{loading ? 'Creating account…' : 'Create account'}</PrimaryButton>
       </form>
       <p>Already registered? <Link to="/login">Log in</Link></p>

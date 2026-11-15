@@ -6,6 +6,10 @@ import Profile from './pages/Profile';
 import Festivals from './pages/Festivals';
 import ReserveTickets from './pages/ReserveTickets';
 import BookingConfirmation from './pages/BookingConfirmation';
+import OrganiserRoute from './components/OrganiserRoute';
+import OrganiserDashboard from './pages/OrganiserDashboard';
+import CreateFestival from './pages/CreateFestival';
+import EditCapacity from './pages/EditCapacity';
 import { useAuth } from './context/AuthContext';
 
 function RequireAuth({ children }) {
@@ -26,6 +30,9 @@ function App() {
         <Route path="/festivals" element={<RequireAuth><Festivals /></RequireAuth>} />
         <Route path="/festivals/:id/reserve" element={<RequireAuth><ReserveTickets /></RequireAuth>} />
         <Route path="/bookings/:reference" element={<RequireAuth><BookingConfirmation /></RequireAuth>} />
+        <Route path="/organiser" element={<OrganiserRoute><OrganiserDashboard /></OrganiserRoute>} />
+        <Route path="/organiser/events/new" element={<OrganiserRoute><CreateFestival /></OrganiserRoute>} />
+        <Route path="/organiser/events/:id/capacity" element={<OrganiserRoute><EditCapacity /></OrganiserRoute>} />
         <Route path="/tasks" element={<Navigate to="/festivals" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes></main>

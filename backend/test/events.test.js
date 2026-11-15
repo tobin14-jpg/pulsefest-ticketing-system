@@ -10,6 +10,8 @@ const sinon = require('sinon');
 const jwt = require('jsonwebtoken');
 const Event = require('../models/Event');
 const Reservation = require('../models/Reservation');
+const User = require('../models/User');
+const { promoteOrganiser } = require('../scripts/promoteOrganiser');
 const app = require('../server');
 
 describe('Festival browsing and reservations with an isolated MongoDB replica set', function () {
@@ -270,6 +272,162 @@ describe('Festival browsing and reservations with an isolated MongoDB replica se
         assert.equal((await response.json()).remainingTickets, 8);
         assert.equal((await readBooking('invalid')).status, 400);
         assert.equal((await readBooking('PF-' + randomUUID())).status, 404);
+    });
+
+    const api = (method, url, body, auth = token) => fetch(baseURL + url, {
+        method, headers: { 'Content-Type': 'application/json', ...(auth ? { Authorization: 'Bearer ' + auth } : {}) },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+    });
+    const eventBody = (overrides = {}) => ({
+        name: 'Organiser Sounds', description: 'A real festival', date: new Date(Date.now() + 86400000).toISOString(),
+        location: 'Perth', price: 25.50, capacity: 10, ...overrides,
+    });
+    let organiserToken;
+    let organiserId;
+
+    it('creates an organiser only through explicit development setup and returns its role at login', async function () {
+        const password = randomBytes(16).toString('hex');
+        const email = 'organiser-test@example.test';
+        const registered = await api('POST', '/api/auth/register', { name: 'Organiser', email, password }, null);
+        assert.equal(registered.status, 201);
+        const account = await registered.json();
+        assert.equal(account.role, 'attendee');
+        organiserId = account.id;
+        const update = sinon.spy(User, 'findOneAndUpdate');
+        await assert.rejects(promoteOrganiser({ nodeEnv: 'production', allowed: 'true', email }), /requires NODE_ENV/);
+        await assert.rejects(promoteOrganiser({ nodeEnv: 'development', allowed: 'false', email }), /requires NODE_ENV/);
+        await assert.rejects(promoteOrganiser({ nodeEnv: 'development', allowed: 'true', email: { $ne: null } }), /exact email/);
+        assert.equal(update.callCount, 0);
+        const beforePassword = (await User.findById(account.id)).password;
+        await promoteOrganiser({ nodeEnv: 'development', allowed: 'true', email });
+        assert.equal((await User.findById(account.id)).password, beforePassword);
+        const login = await api('POST', '/api/auth/login', { email, password }, null);
+        assert.equal(login.status, 200);
+        const signedIn = await login.json();
+        assert.equal(signedIn.role, 'organiser');
+        assert.equal(signedIn.password, undefined);
+        organiserToken = signedIn.token;
+        // The original token also uses the new database role, not an old JWT claim.
+        assert.equal((await api('GET', '/api/events/manage', undefined, account.token)).status, 200);
+    });
+
+    it('rejects role injection through registration and profile changes', async function () {
+        const response = await api('POST', '/api/auth/register', {
+            name: 'Injected', email: 'injected@example.test', password: 'valid-test-password', role: 'organiser',
+        }, null);
+        assert.equal(response.status, 403);
+        assert.equal(await User.countDocuments({ email: 'injected@example.test' }), 0);
+        assert.equal((await api('PUT', '/api/auth/profile', { role: 'organiser' })).status, 403);
+        const update = await api('PUT', '/api/auth/profile', { name: 'Still attendee', address: '' });
+        assert.equal(update.status, 200);
+        assert.equal((await update.json()).role, 'attendee');
+        assert.equal((await User.findById(attendeeId)).role, 'attendee');
+    });
+
+    it('enforces organiser permissions for every management endpoint including forged JWT role claims', async function () {
+        const event = await Event.create(festival());
+        const forgedRole = jwt.sign({ id: attendeeId, role: 'organiser' }, process.env.JWT_SECRET);
+        for (const auth of [null, token, forgedRole]) {
+            const expected = auth ? 403 : 401;
+            assert.equal((await api('GET', '/api/events/manage', undefined, auth)).status, expected);
+            assert.equal((await api('POST', '/api/events', eventBody(), auth)).status, expected);
+            assert.equal((await api('PATCH', '/api/events/' + event.id, { capacity: 100 }, auth)).status, expected);
+        }
+        assert.equal(await Event.countDocuments(), 1);
+        assert.equal((await Event.findById(event.id)).capacity, 10);
+    });
+
+    it('treats legacy accounts without a role as attendees and honours role revocation immediately', async function () {
+        await User.collection.updateOne({ _id: new mongoose.Types.ObjectId(attendeeId) }, { $unset: { role: '' } });
+        assert.equal((await api('GET', '/api/events/manage')).status, 403);
+        assert.equal((await (await api('GET', '/api/auth/profile')).json()).role, 'attendee');
+        await User.updateOne({ _id: organiserId }, { $set: { role: 'attendee' } });
+        try {
+            assert.equal((await api('POST', '/api/events', eventBody(), organiserToken)).status, 403);
+        } finally {
+            await User.updateOne({ _id: organiserId }, { $set: { role: 'organiser' } });
+        }
+    });
+
+    it('completes organiser create, attendee reserve and organiser capacity-edit workflows', async function () {
+        const created = await api('POST', '/api/events', eventBody({ name: '  New Festival  ', capacity: 6 }), organiserToken);
+        assert.equal(created.status, 201);
+        const event = await created.json();
+        assert.equal(event.name, 'New Festival');
+        assert.equal(event.remainingTickets, 6);
+        assert.equal(String((await Event.findById(event._id)).createdBy), organiserId);
+        assert.equal((await book(event._id, 4)).status, 201);
+        assert.equal((await api('PATCH', '/api/events/' + event._id, { capacity: 3 }, organiserToken)).status, 409);
+        assert.equal((await Event.findById(event._id)).capacity, 6);
+        const increased = await api('PATCH', '/api/events/' + event._id, { capacity: 8 }, organiserToken);
+        assert.equal(increased.status, 200);
+        assert.equal((await increased.json()).remainingTickets, 4);
+        const listing = await (await request()).json();
+        assert.equal(listing[0].capacity, 8);
+        assert.equal(listing[0].remainingTickets, 4);
+        const equalReserved = await api('PATCH', '/api/events/' + event._id, { capacity: 4 }, organiserToken);
+        assert.equal(equalReserved.status, 200);
+        assert.equal((await equalReserved.json()).remainingTickets, 0);
+    });
+
+    it('validates event fields, prevents internal-field injection and allows zero capacity and free events', async function () {
+        for (const override of [
+            { name: ' ' }, { name: 'x'.repeat(121) }, { location: '' }, { location: {} },
+            { description: {} }, { description: 'x'.repeat(2001) }, { date: 'invalid' },
+            { date: '2099-02-30T10:00:00.000Z' }, { date: new Date(Date.now() - 1000).toISOString() },
+            { date: 1234 }, { price: -1 }, { price: '25' }, { price: 1.234 },
+            { capacity: -1 }, { capacity: 1.5 }, { capacity: '10' }, { capacity: Number.MAX_SAFE_INTEGER + 1 },
+            { createdBy: attendeeId }, { reservedTickets: -10 },
+        ]) {
+            assert.equal((await api('POST', '/api/events', eventBody(override), organiserToken)).status, 400, JSON.stringify(override));
+        }
+        assert.equal(await Event.countDocuments(), 0);
+        const response = await api('POST', '/api/events', eventBody({ capacity: 0, price: 0 }), organiserToken);
+        assert.equal(response.status, 201);
+        assert.equal((await response.json()).remainingTickets, 0);
+    });
+
+    it('lists past and sold-out events for organisers and rejects invalid capacity patches', async function () {
+        const event = await Event.create(festival({ date: new Date(Date.now() - 1000), capacity: 0 }));
+        const list = await api('GET', '/api/events/manage', undefined, organiserToken);
+        assert.equal(list.status, 200);
+        const events = await list.json();
+        assert.equal(events.length, 1);
+        assert.equal(events[0].remainingTickets, 0);
+        for (const body of [{}, { capacity: -1 }, { capacity: 2.5 }, { capacity: '10' }, { capacity: null }, { capacity: 10, reservedTickets: 0 }]) {
+            assert.equal((await api('PATCH', '/api/events/' + event.id, body, organiserToken)).status, 400);
+        }
+        assert.equal((await api('PATCH', '/api/events/invalid', { capacity: 10 }, organiserToken)).status, 400);
+        assert.equal((await api('PATCH', '/api/events/' + new mongoose.Types.ObjectId(), { capacity: 10 }, organiserToken)).status, 404);
+        assert.equal((await Event.findById(event.id)).capacity, 0);
+    });
+
+    it('keeps capacity consistent when bookings race an organiser reduction', async function () {
+        for (let run = 0; run < 8; run += 1) {
+            const event = await Event.create(festival({ capacity: 4 }));
+            const [booking, reduction] = await Promise.all([
+                book(event.id, 4), api('PATCH', '/api/events/' + event.id, { capacity: 2 }, organiserToken),
+            ]);
+            assert.ok([201, 409].includes(booking.status));
+            assert.ok([200, 409].includes(reduction.status));
+            const savedEvent = await Event.findById(event.id);
+            const savedBookings = await Reservation.find({ eventId: event.id });
+            const reserved = savedBookings.reduce((sum, reservation) => sum + reservation.quantity, 0);
+            assert.equal(savedEvent.reservedTickets, reserved);
+            assert.ok(savedEvent.capacity >= reserved);
+            assert.ok((booking.status === 201 && reduction.status === 409) || (booking.status === 409 && reduction.status === 200));
+        }
+    });
+
+    it('handles invalid authentication input, malformed JSON and duplicate email without database details', async function () {
+        assert.equal((await api('POST', '/api/auth/login', { email: { $ne: null }, password: 'test' }, null)).status, 400);
+        assert.equal((await api('POST', '/api/auth/register', { name: 'X', email: 'x@example.test', password: 'short' }, null)).status, 400);
+        assert.equal((await api('POST', '/api/auth/register', { name: 'X', email: 'attendee@example.test', password: 'validpassword' }, null)).status, 409);
+        const malformed = await fetch(baseURL + '/api/events', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{broken',
+        });
+        assert.equal(malformed.status, 400);
+        assert.equal((await malformed.json()).message, 'Send a valid JSON request body.');
     });
 });
 
