@@ -6,8 +6,6 @@ PulseFest is a full-stack web application developed for the IFQ636 Software Life
 
 **Deployed application:** http://YOUR_EC2_PUBLIC_IP
 
-**Figma interactive prototype:** [Insert view-only Figma link]
-
 The application is hosted on a university-provided AWS EC2 Ubuntu instance.
 
 **Note:** The current public deployment uses HTTP. HTTPS is required before entering real credentials over the internet. The deployment may also be unavailable after the university assessment period.
@@ -36,7 +34,7 @@ The application is hosted on a university-provided AWS EC2 Ubuntu instance.
 ### Clone the Repository
 
 ```bash
-git clone YOUR_GITHUB_REPOSITORY_URL
+git clone https://github.com/tobin14-jpg/pulsefest-ticketing-system
 cd pulsefest-ticketing-system
 ```
 
@@ -169,10 +167,8 @@ The application should also be manually tested using attendee and organiser acco
 
 The supporting assignment documentation includes Jira backlog items, SysML design diagrams, Figma wireframes/prototype, GitHub implementation history, deployment evidence and a requirements traceability matrix.
 
-**Figma prototype:** [Insert view-only link]
-
-**Requirements traceability matrix:** [Insert location or link]
+**Figma prototype:** https://www.figma.com/proto/TW52zuunodjCbtPLtLaTus/pulseFest?node-id=1-8&p=f&t=UDK10g0M5njCfcV3-1&scaling=min-zoom&content-scaling=fixed&page-id=0%3A1
 
 ---
 
-*PulseFest — IFQ636 Software Lifecycle Management Project*
+*PulseFest*
