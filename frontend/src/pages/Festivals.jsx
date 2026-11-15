@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import axiosInstance from '../axiosConfig';
 import { useAuth } from '../context/AuthContext';
 import EventCard from '../components/EventCard';
@@ -36,7 +37,9 @@ export default function Festivals() {
       {loading && <p role="status" className="empty-state">Loading festivals…</p>}
       {!loading && error && <div className="empty-state"><AlertMessage>{error}</AlertMessage><PrimaryButton onClick={() => setAttempt(attempt + 1)}>Try again</PrimaryButton></div>}
       {!loading && !error && events.length === 0 && <div className="empty-state"><h2>The next line-up is on its way.</h2><p>No upcoming festivals yet. Check back soon.</p></div>}
-      {!loading && !error && events.length > 0 && <div className="event-grid">{events.map((event) => <EventCard key={event._id} event={event} />)}</div>}
+      {!loading && !error && events.length > 0 && <div className="event-grid">{events.map((event) => <EventCard key={event._id} event={event}>
+        {event.remainingTickets > 0 && <Link className="primary-button" to={`/festivals/${event._id}/reserve`}>Reserve tickets</Link>}
+      </EventCard>)}</div>}
     </section>
   );
 }
