@@ -21,7 +21,7 @@ export default function Login() {
     try {
       const response = await axiosInstance.post('/api/auth/login', formData);
       login(response.data);
-      navigate(location.state?.from || '/festivals', { replace: true });
+      navigate(location.state?.from || (response.data.role === 'organiser' ? '/organiser' : '/festivals'), { replace: true });
     } catch (failure) {
       setError(failure.response?.data?.message || 'Unable to log in. Please try again.');
     } finally {

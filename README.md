@@ -8,9 +8,10 @@ A small university music festival ticket reservation and event management projec
 - PFT-5: authenticated festival browsing with availability and loading, empty, error and sold-out states.
 - PFT-6: reserve 1–4 tickets, receive a persisted unique reference, view a private confirmation and see updated availability. Transactions prevent overselling and partial writes.
 - Existing registration, JWT login, password hashing and profile functionality are preserved.
-- Organiser roles, event creation/capacity editing, deployment configuration and CI repair remain **pending** their next Jira increments.
+- PFT-8/PFT-9/PFT-10: database-enforced organiser permissions, organiser dashboard, event creation and safe ticket-capacity editing.
+- Deployment configuration and CI repair remain **pending** their deployment increment.
 
-The intended roles are attendee (browse and reserve) and organiser (create events and manage capacity). Only the attendee workflow is implemented so far; there is no organiser role or public event-write endpoint yet.
+The two roles are attendee (browse and reserve) and organiser (create events and manage capacity). Existing users without a stored role behave as attendees. Ordinary registration always creates attendees and rejects role assignment; profile updates cannot change roles. Organisers can also use the attendee workflow. For this small prototype, all organisers manage all festivals, including past and sold-out events.
 
 ## Local setup
 
@@ -43,7 +44,7 @@ Open `http://localhost:3000`. Relative `/api` requests use the development proxy
 
 ## Optional development festival
 
-Until organiser creation is available, this explicit command inserts one labelled demo event into the database selected by `backend/.env`. Use a development database only and register a test account first. The earliest account is used solely as the fixture's creator reference; no accounts or roles are changed. An existing demo event and its bookings are left unchanged.
+For an optional development fixture, this explicit command inserts one labelled demo event into the database selected by `backend/.env`. The organiser dashboard now also creates events normally. Use a development database only and register a test account first. The earliest account is used solely as the fixture's creator reference; no accounts or roles are changed. An existing demo event and its bookings are left unchanged.
 
 PowerShell:
 
@@ -68,6 +69,32 @@ If a response is uncertain, retry the same quantity on the open form without ref
 
 See [PFT-6 API, implementation, review and acceptance checks](docs/PFT-6.md).
 
+## Organiser setup and workflow
+
+Development-only setup requires local shell access and a deliberate opt-in. First register `organizer@pulsefest.com` through the app using a password of your choice. The user chose to do this later; the implementation agent has **not** created or promoted this live account. Then run from the repository directory in PowerShell:
+
+```powershell
+$env:NODE_ENV = 'development'
+$env:ALLOW_ORGANISER_SETUP = 'true'
+$env:ORGANISER_EMAIL = 'organizer@pulsefest.com'
+npm run organiser:promote --prefix backend
+Remove-Item Env:\ALLOW_ORGANISER_SETUP, Env:\ORGANISER_EMAIL
+```
+
+Ubuntu/macOS equivalent:
+
+```sh
+NODE_ENV=development ALLOW_ORGANISER_SETUP=true ORGANISER_EMAIL=organizer@pulsefest.com npm run organiser:promote --prefix backend
+```
+
+Use only a development database. The command refuses production mode or a missing opt-in, requires an existing exact-match email, preserves its password and changes only that account's role. It exposes no HTTP promotion endpoint. Do not enable this flag in production or store it in a shared environment file.
+
+Log out and log in again. Organiser login opens the dashboard, with a navigation link available thereafter. Create an event with a name, future local date/time, location, AUD price and non-negative whole-number capacity. The browser converts the date/time to UTC for storage. Description is optional. The event is persisted and appears in attendee listings.
+
+From the dashboard, select **Edit ticket capacity**. A successful update is persisted and shown on the dashboard and on the next attendee listing refresh. Reducing below reserved tickets returns a conflict, including when bookings arrive while the form is open; refresh the event and choose a valid capacity. Zero capacity and free events are allowed. Other event fields are not editable in this MVP.
+
+See [combined PFT-8/PFT-9/PFT-10 review and acceptance checks](docs/PFT-8-9-10.md). PFT-7 booking confirmation already exists in PFT-6; no Jira status changes were made.
+
 ## Tests and production build
 
 ```sh
@@ -78,22 +105,22 @@ npm run build --prefix frontend
 
 Backend tests require `mongod` on PATH or `MONGOD_BINARY` set to its executable path. They create an isolated loopback replica set with temporary data and clean it up afterward, never using the application database. Local tests used MongoDB 5.0.2. UI tests use the existing React/Jest tools with mocked HTTP responses.
 
-Verified on 14 November 2026: **16 backend tests passed, 11 frontend tests passed and production build compiled successfully**. Existing CRA/Browserslist/React Router warnings remain. No dependencies were added. Browser acceptance testing and actual Atlas reservation writes remain manual checks.
+Verified on 14 November 2026: **25 backend tests passed, 20 frontend tests passed and production build compiled successfully**. Existing CRA/Browserslist/React Router warnings remain. No dependencies were added. The backend tests exercise both complete workflows and bookings racing capacity reductions against an isolated replica set. Browser acceptance testing and live Atlas organiser writes remain manual checks.
 
 ## Architecture
 
 - `backend/server.js`: Express app, route mounting and startup/index initialisation.
 - `backend/config/db.js`: existing MongoDB connection.
-- `backend/models/User.js`: existing user and bcrypt password hashing.
+- `backend/models/User.js`: existing user and bcrypt password hashing, extended with attendee/organiser roles.
 - `backend/models/Event.js`: event fields, capacity and reserved counter.
 - `backend/models/Reservation.js`: event/attendee IDs, quantity, unique reference and retry request ID.
 - `backend/controllers/` and `routes/`: existing separation of HTTP routing and database operations.
-- `backend/middleware/authMiddleware.js`: JWT authentication with database user lookup.
+- `backend/middleware/authMiddleware.js`: JWT authentication and organiser authorisation using the current database role, not client/JWT role claims.
 - `frontend/src/context/AuthContext.js`: in-memory authentication.
-- `frontend/src/pages/`: login/register/profile, listings, reservation and confirmation.
+- `frontend/src/pages/`: login/register/profile, listings, reservation/confirmation and organiser dashboard/create/capacity screens.
 - `frontend/src/components/`: reusable navigation, card, field, button and alert.
 
-A conditional atomic capacity increment and a reservation insert execute inside the same transaction; either both commit or both roll back. Unique indexes protect booking references and per-attendee retry IDs. The later organiser capacity update must conditionally reject values below the reserved count on the same event document.
+A conditional atomic capacity increment and a reservation insert execute inside the same transaction; either both commit or both roll back. Unique indexes protect booking references and per-attendee retry IDs. Organiser capacity updates atomically require the reserved count to be at most the new capacity, on the same event document that bookings modify.
 
 ## Deployment status and known limitations
 
@@ -103,7 +130,7 @@ The intended stack is React, Node/Express, Atlas, PM2 and Nginx on the universit
 
 Public authentication must use the university-approved HTTPS/certificate or managed TLS termination approach. Do not expose credential submission over plain HTTP. Production API URLs are relative and do not require an embedded EC2 address. The frontend uses browser crypto UUIDs, available on HTTPS and localhost.
 
-This is a simplified academic prototype: no payments, email tickets, QR scanning, refunds or seat selection. No organiser dashboard or booking-history screen yet. Sessions are in memory; broader starter authentication hardening remains pending. No pagination. The 1–4 ticket limit is per reservation, not a cumulative per-user limit. No public deployment has been verified.
+This is a simplified academic prototype: no payments, email tickets, QR scanning, refunds or seat selection. No booking-history screen or pagination. Sessions are in memory and the starter's long-lived JWT behavior remains. Role changes are enforced immediately by the API, but refresh the UI by logging in again. Registration requires at least 8 password characters and at most 72 UTF-8 bytes; login remains compatible with shorter existing passwords. Email lookup is exact and case-sensitive. The 1–4 ticket limit is per reservation, not a cumulative per-user limit. Event creation is not idempotent: check the dashboard before retrying an uncertain creation result. No public deployment has been verified.
 
 ## Original university starter brief
 
